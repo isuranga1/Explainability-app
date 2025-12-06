@@ -2,27 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { Stage, Layer, Image as KonvaImage, Line } from "react-konva";
-
-const thStyle = {
-  textAlign: "left",
-  borderBottom: "1px solid #ddd",
-  padding: "0.3rem",
-};
-const tdStyle = {
-  padding: "0.3rem",
-};
+import { Upload, Zap, RefreshCw, Sparkles, Activity } from "lucide-react";
 
 export default function Page() {
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:5000";
 
-  // ===== Shared upload state =====
   const [file, setFile] = useState(null);
   const [originalUrl, setOriginalUrl] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [attrMethod, setAttrMethod] = useState("transformer_attribution");
 
-  // ===== Heatmap & LRP perturbation state =====
   const [heatmapUrl, setHeatmapUrl] = useState(null);
-  const [targetIndex, setTargetIndex] = useState(""); // string input
+  const [targetIndex, setTargetIndex] = useState("");
   const [originalPrediction, setOriginalPrediction] = useState(null);
   const [positiveResults, setPositiveResults] = useState([]);
   const [negativeResults, setNegativeResults] = useState([]);
@@ -31,19 +22,17 @@ export default function Page() {
   const [loadingPosPert, setLoadingPosPert] = useState(false);
   const [loadingNegPert, setLoadingNegPert] = useState(false);
 
-  // ===== Canvas-based perturbation (Konva, freehand mask) =====
   const [konvaImage, setKonvaImage] = useState(null);
   const [imgSize, setImgSize] = useState({ width: 0, height: 0 });
-  const [maskLines, setMaskLines] = useState([]); // array of {points: []}
+  const [maskLines, setMaskLines] = useState([]);
   const [isDrawingMask, setIsDrawingMask] = useState(false);
 
   const [perturbedUrl, setPerturbedUrl] = useState(null);
   const [inferenceResults, setInferenceResults] = useState([]);
   const [loadingInfer, setLoadingInfer] = useState(false);
 
-  const stageWidth = 500; // displayed width
+  const stageWidth = 500;
 
-  // Load image for Konva when originalUrl changes
   useEffect(() => {
     if (!originalUrl) {
       setKonvaImage(null);
@@ -62,7 +51,6 @@ export default function Page() {
     };
   }, [originalUrl]);
 
-  // ===== File upload handler =====
   const handleFileChange = (e) => {
     const selected = e.target.files?.[0];
     if (!selected) return;
@@ -71,7 +59,6 @@ export default function Page() {
     const url = URL.createObjectURL(selected);
     setOriginalUrl(url);
 
-    // reset outputs
     setHeatmapUrl(null);
     setOriginalPrediction(null);
     setPositiveResults([]);
@@ -82,7 +69,6 @@ export default function Page() {
     setErrorMsg("");
   };
 
-  // ===== Heatmap endpoint =====
   const handleGenerateHeatmap = async () => {
     if (!file) {
       setErrorMsg("Please select an image first.");
@@ -99,6 +85,7 @@ export default function Page() {
       if (targetIndex.trim() !== "") {
         formData.append("target_index", targetIndex.trim());
       }
+      formData.append("method", attrMethod);
 
       const res = await fetch(`${API_BASE}/api/heatmap`, {
         method: "POST",
@@ -124,7 +111,6 @@ export default function Page() {
     }
   };
 
-  // ===== LRP perturbation helper (positive / negative) =====
   const runPerturbation = async (perturbationType) => {
     if (!file) {
       setErrorMsg("Please select an image first.");
@@ -143,6 +129,7 @@ export default function Page() {
         formData.append("target_index", targetIndex.trim());
       }
       formData.append("perturbation_type", perturbationType);
+      formData.append("method", attrMethod);
 
       const res = await fetch(`${API_BASE}/api/perturbation`, {
         method: "POST",
@@ -178,12 +165,10 @@ export default function Page() {
   const handlePositivePerturbation = () => runPerturbation("positive");
   const handleNegativePerturbation = () => runPerturbation("negative");
 
-  // ===== Konva handlers: freehand mask drawing =====
   const handleMaskMouseDown = (e) => {
     if (!konvaImage) return;
     const pos = e.target.getStage().getPointerPosition();
     setIsDrawingMask(true);
-    // start a new line
     setMaskLines((lines) => [
       ...lines,
       {
@@ -208,7 +193,6 @@ export default function Page() {
     setIsDrawingMask(false);
   };
 
-  // ===== Apply canvas-based perturbation using freehand mask =====
   const handleApplyCanvasPerturbation = () => {
     if (!konvaImage || maskLines.length === 0) {
       setErrorMsg("Draw a mask on the image first (paint over the region).");
@@ -220,15 +204,13 @@ export default function Page() {
     canvas.height = imgSize.height;
     const ctx = canvas.getContext("2d");
 
-    // Draw original image scaled to canvas
     ctx.drawImage(konvaImage, 0, 0, imgSize.width, imgSize.height);
 
-    // Draw mask strokes as occlusion (black)
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "black";
-    ctx.lineWidth = 25; // brush thickness – adjust as needed
+    ctx.lineWidth = 25;
 
     maskLines.forEach((line) => {
       const pts = line.points;
@@ -248,7 +230,6 @@ export default function Page() {
     setErrorMsg("");
   };
 
-  // ===== Run inference on perturbed image (/api/infer) =====
   const handleRunInferencePerturbed = async () => {
     if (!perturbedUrl) {
       setErrorMsg("Apply a canvas perturbation first.");
@@ -291,472 +272,435 @@ export default function Page() {
   };
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        padding: "2rem",
-        display: "flex",
-        flexDirection: "column",
-        gap: "1.5rem",
-        alignItems: "center",
-        background: "#f5f5f5",
-      }}
-    >
-      <h1>
-        ViT-LRP Explorer: Heatmaps, LRP Perturbations & Mask-based Occlusion
-      </h1>
-
-      {/* Controls (upload + target index + 3 buttons) */}
-      <div
-        style={{
-          background: "white",
-          padding: "1.5rem",
-          borderRadius: "0.75rem",
-          boxShadow: "0 4px 10px rgba(0,0,0,0.06)",
-          width: "100%",
-          maxWidth: 900,
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.75rem",
-        }}
-      >
-        <label style={{ fontSize: "0.9rem" }}>
-          Image:
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            style={{ display: "block", marginTop: "0.25rem" }}
-          />
-        </label>
-
-        <label style={{ fontSize: "0.9rem" }}>
-          Target class index (0–999, optional):
-          <input
-            type="number"
-            min={0}
-            max={999}
-            value={targetIndex}
-            onChange={(e) => setTargetIndex(e.target.value)}
-            placeholder="Leave empty to use model top-1 as target"
-            style={{
-              marginTop: "0.25rem",
-              padding: "0.3rem 0.5rem",
-              borderRadius: "0.4rem",
-              border: "1px solid #ccc",
-              width: "240px",
-            }}
-          />
-        </label>
-
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-          <button
-            onClick={handleGenerateHeatmap}
-            disabled={loadingHeatmap || !file}
-            style={{
-              padding: "0.6rem 1.1rem",
-              borderRadius: "0.5rem",
-              border: "none",
-              background: "#1f2937",
-              color: "white",
-              cursor: loadingHeatmap || !file ? "not-allowed" : "pointer",
-              opacity: loadingHeatmap || !file ? 0.6 : 1,
-            }}
-          >
-            {loadingHeatmap ? "Generating heatmap..." : "Generate Heatmap"}
-          </button>
-
-          <button
-            onClick={handlePositivePerturbation}
-            disabled={loadingPosPert || !file}
-            style={{
-              padding: "0.6rem 1.1rem",
-              borderRadius: "0.5rem",
-              border: "none",
-              background: "#16a34a",
-              color: "white",
-              cursor: loadingPosPert || !file ? "not-allowed" : "pointer",
-              opacity: loadingPosPert || !file ? 0.6 : 1,
-            }}
-          >
-            {loadingPosPert
-              ? "Running + perturbation..."
-              : "Positive Perturbation"}
-          </button>
-
-          <button
-            onClick={handleNegativePerturbation}
-            disabled={loadingNegPert || !file}
-            style={{
-              padding: "0.6rem 1.1rem",
-              borderRadius: "0.5rem",
-              border: "none",
-              background: "#dc2626",
-              color: "white",
-              cursor: loadingNegPert || !file ? "not-allowed" : "pointer",
-              opacity: loadingNegPert || !file ? 0.6 : 1,
-            }}
-          >
-            {loadingNegPert
-              ? "Running - perturbation..."
-              : "Negative Perturbation"}
-          </button>
-        </div>
-
-        {errorMsg && (
-          <p style={{ color: "red", marginTop: "0.5rem" }}>{errorMsg}</p>
-        )}
-      </div>
-
-      {/* Original + Heatmap */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "1.5rem",
-          justifyContent: "center",
-          width: "100%",
-          maxWidth: 900,
-        }}
-      >
-        {originalUrl && (
-          <div>
-            <h3>Original image</h3>
-            <img
-              src={originalUrl}
-              alt="original"
-              style={{
-                maxWidth: 400,
-                maxHeight: 400,
-                objectFit: "contain",
-                borderRadius: "0.5rem",
-                background: "white",
-                boxShadow: "0 4px 10px rgba(0,0,0,0.06)",
-              }}
-            />
+    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-3">
+          <div className="flex items-center justify-center gap-3">
+            <Activity className="w-10 h-10 text-indigo-400" />
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-400 to-blue-400 bg-clip-text text-transparent">
+              ViT-LRP Explorer
+            </h1>
           </div>
-        )}
-
-        {heatmapUrl && (
-          <div>
-            <h3>Heatmap (LRP)</h3>
-            <img
-              src={heatmapUrl}
-              alt="heatmap"
-              style={{
-                maxWidth: 400,
-                maxHeight: 400,
-                objectFit: "contain",
-                borderRadius: "0.5rem",
-                background: "white",
-                boxShadow: "0 4px 10px rgba(0,0,0,0.06)",
-              }}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* LRP perturbation analysis */}
-      {(originalPrediction ||
-        positiveResults.length > 0 ||
-        negativeResults.length > 0) && (
-        <div
-          style={{
-            marginTop: "1rem",
-            background: "white",
-            padding: "1rem 1.5rem",
-            borderRadius: "0.75rem",
-            boxShadow: "0 4px 10px rgba(0,0,0,0.06)",
-            width: "100%",
-            maxWidth: 1000,
-          }}
-        >
-          <h3>LRP-based Perturbation Analysis</h3>
-
-          {originalPrediction && (
-            <>
-              <p style={{ marginTop: "0.5rem" }}>
-                <strong>Top-1 (original):</strong>{" "}
-                {originalPrediction.top1.class_name} (idx{" "}
-                {originalPrediction.top1.class_idx}) —{" "}
-                {(originalPrediction.top1.prob * 100).toFixed(2)}%
-              </p>
-              <p>
-                <strong>Target class:</strong>{" "}
-                {originalPrediction.target.class_name} (idx{" "}
-                {originalPrediction.target.class_idx}) —{" "}
-                {(originalPrediction.target.prob * 100).toFixed(2)}%
-              </p>
-            </>
-          )}
-
-          {positiveResults.length > 0 && (
-            <>
-              <h4 style={{ marginTop: "1rem" }}>
-                Positive perturbation (mask high-importance pixels)
-              </h4>
-              <table
-                style={{
-                  width: "100%",
-                  marginTop: "0.5rem",
-                  borderCollapse: "collapse",
-                  fontSize: "0.9rem",
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Fraction perturbed</th>
-                    <th style={thStyle}>Top-1 class</th>
-                    <th style={thStyle}>Top-1 prob</th>
-                    <th style={thStyle}>Target prob</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {positiveResults.map((r) => (
-                    <tr key={`pos-${r.fraction}`}>
-                      <td style={tdStyle}>{(r.fraction * 100).toFixed(0)}%</td>
-                      <td style={tdStyle}>
-                        {r.top1_class_name} (idx {r.top1_class_idx})
-                      </td>
-                      <td style={tdStyle}>{(r.top1_prob * 100).toFixed(2)}%</td>
-                      <td style={tdStyle}>
-                        {(r.target_prob * 100).toFixed(2)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-
-          {negativeResults.length > 0 && (
-            <>
-              <h4 style={{ marginTop: "1rem" }}>
-                Negative perturbation (mask low-importance pixels)
-              </h4>
-              <table
-                style={{
-                  width: "100%",
-                  marginTop: "0.5rem",
-                  borderCollapse: "collapse",
-                  fontSize: "0.9rem",
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Fraction perturbed</th>
-                    <th style={thStyle}>Top-1 class</th>
-                    <th style={thStyle}>Top-1 prob</th>
-                    <th style={thStyle}>Target prob</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {negativeResults.map((r) => (
-                    <tr key={`neg-${r.fraction}`}>
-                      <td style={tdStyle}>{(r.fraction * 100).toFixed(0)}%</td>
-                      <td style={tdStyle}>
-                        {r.top1_class_name} (idx {r.top1_class_idx})
-                      </td>
-                      <td style={tdStyle}>{(r.top1_prob * 100).toFixed(2)}%</td>
-                      <td style={tdStyle}>
-                        {(r.target_prob * 100).toFixed(2)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Konva mask section */}
-      <div
-        style={{
-          marginTop: "1rem",
-          width: "100%",
-          maxWidth: 1100,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "1.5rem",
-          justifyContent: "center",
-        }}
-      >
-        {/* Canvas with freehand mask */}
-        <div style={{ flex: "1 1 400px", minWidth: 320 }}>
-          <h3>Mask-based Perturbation (paint a segmentation-like region)</h3>
-          <p style={{ fontSize: "0.85rem", color: "#555" }}>
-            Draw over the image with your mouse. The painted region will be
-            occluded (set to black) for inference.
+          <p className="text-slate-400 text-lg">
+            Analyze model predictions with heatmaps, LRP perturbations &
+            mask-based occlusion
           </p>
-          <div
-            style={{
-              borderRadius: "0.5rem",
-              overflow: "hidden",
-              background: "white",
-              boxShadow: "0 4px 10px rgba(0,0,0,0.06)",
-              marginTop: "0.5rem",
-            }}
-          >
-            {konvaImage && imgSize.width > 0 && imgSize.height > 0 ? (
-              <Stage
-                width={imgSize.width}
-                height={imgSize.height}
-                onMouseDown={handleMaskMouseDown}
-                onMouseMove={handleMaskMouseMove}
-                onMouseUp={handleMaskMouseUp}
-                style={{ cursor: "crosshair" }}
-              >
-                <Layer>
-                  <KonvaImage
-                    image={konvaImage}
-                    x={0}
-                    y={0}
-                    width={imgSize.width}
-                    height={imgSize.height}
-                  />
-                </Layer>
-                <Layer>
-                  {maskLines.map((line, idx) => (
-                    <Line
-                      key={idx}
-                      points={line.points}
-                      stroke="red"
-                      strokeWidth={20}
-                      tension={0.5}
-                      lineCap="round"
-                      lineJoin="round"
-                      opacity={0.6}
-                    />
-                  ))}
-                </Layer>
-              </Stage>
-            ) : (
-              <div style={{ padding: "2rem", textAlign: "center" }}>
-                Upload an image to start drawing.
-              </div>
-            )}
-          </div>
-
-          <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem" }}>
-            <button
-              onClick={handleApplyCanvasPerturbation}
-              disabled={!originalUrl || maskLines.length === 0}
-              style={{
-                padding: "0.6rem 1.1rem",
-                borderRadius: "0.5rem",
-                border: "none",
-                background: "#1d4ed8",
-                color: "white",
-                cursor:
-                  !originalUrl || maskLines.length === 0
-                    ? "not-allowed"
-                    : "pointer",
-                opacity: !originalUrl || maskLines.length === 0 ? 0.6 : 1,
-              }}
-            >
-              Apply Mask Perturbation
-            </button>
-
-            <button
-              onClick={handleRunInferencePerturbed}
-              disabled={!perturbedUrl || loadingInfer}
-              style={{
-                padding: "0.6rem 1.1rem",
-                borderRadius: "0.5rem",
-                border: "none",
-                background: "#16a34a",
-                color: "white",
-                cursor:
-                  !perturbedUrl || loadingInfer ? "not-allowed" : "pointer",
-                opacity: !perturbedUrl || loadingInfer ? 0.6 : 1,
-              }}
-            >
-              {loadingInfer ? "Running inference..." : "Infer on Masked Image"}
-            </button>
-          </div>
         </div>
 
-        {/* Preview + inference results */}
-        <div style={{ flex: "1 1 350px", minWidth: 320 }}>
-          <h3>Original & Mask-Perturbed Preview</h3>
-          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-            {originalUrl && (
-              <div>
-                <p>Original</p>
-                <img
-                  src={originalUrl}
-                  alt="original-preview"
-                  style={{
-                    maxWidth: 250,
-                    maxHeight: 250,
-                    objectFit: "contain",
-                    borderRadius: "0.5rem",
-                    background: "white",
-                    boxShadow: "0 4px 10px rgba(0,0,0,0.06)",
-                  }}
+        {/* Control Panel */}
+        <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-700 p-6 space-y-6">
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* File Upload */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-300">
+                Upload Image
+              </label>
+              <div className="relative">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="block w-full text-sm text-slate-300 file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-900 file:text-indigo-300 hover:file:bg-indigo-800 file:cursor-pointer cursor-pointer border border-slate-600 bg-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
-            )}
-            {perturbedUrl && (
-              <div>
-                <p>Perturbed (mask)</p>
-                <img
-                  src={perturbedUrl}
-                  alt="perturbed-preview"
-                  style={{
-                    maxWidth: 250,
-                    maxHeight: 250,
-                    objectFit: "contain",
-                    borderRadius: "0.5rem",
-                    background: "white",
-                    boxShadow: "0 4px 10px rgba(0,0,0,0.06)",
-                  }}
-                />
-              </div>
-            )}
+            </div>
+
+            {/* Target Index */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-700">
+                Target Class Index (0-999)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={999}
+                value={targetIndex}
+                onChange={(e) => setTargetIndex(e.target.value)}
+                placeholder="Leave empty for top-1"
+                className="w-full px-4 py-2.5 border border-slate-600 bg-slate-900 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-200 placeholder:text-slate-500"
+              />
+            </div>
           </div>
 
-          {inferenceResults.length > 0 && (
-            <div
-              style={{
-                marginTop: "1rem",
-                background: "white",
-                padding: "0.75rem 1rem",
-                borderRadius: "0.75rem",
-                boxShadow: "0 4px 10px rgba(0,0,0,0.06)",
-              }}
+          {/* Attribution Method */}
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-slate-700">
+              Attribution Method
+            </label>
+            <select
+              value={attrMethod}
+              onChange={(e) => setAttrMethod(e.target.value)}
+              className="w-full px-4 py-2.5 border border-slate-600 bg-slate-900 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-200 bg-slate-900"
             >
-              <h4>Inference on Mask-Perturbed Image (Top-5)</h4>
-              <table
-                style={{
-                  width: "100%",
-                  marginTop: "0.5rem",
-                  borderCollapse: "collapse",
-                  fontSize: "0.9rem",
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Rank</th>
-                    <th style={thStyle}>Class</th>
-                    <th style={thStyle}>Prob</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inferenceResults.map((r, idx) => (
-                    <tr key={`${r.class_idx}-${idx}`}>
-                      <td style={tdStyle}>{idx + 1}</td>
-                      <td style={tdStyle}>
-                        {r.class_name} (idx {r.class_idx})
-                      </td>
-                      <td style={tdStyle}>{(r.prob * 100).toFixed(2)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <option value="rollout">Rollout</option>
+              <option value="transformer_attribution">
+                Transformer Attribution
+              </option>
+              <option value="full">Full LRP</option>
+              <option value="last_layer">LRP Last Layer</option>
+              <option value="last_layer_attn">Attention Last Layer</option>
+              <option value="attn_gradcam">Attention GradCAM</option>
+            </select>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handleGenerateHeatmap}
+              disabled={loadingHeatmap || !file}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              <Sparkles className="w-4 h-4" />
+              {loadingHeatmap ? "Generating..." : "Generate Heatmap"}
+            </button>
+
+            <button
+              onClick={handlePositivePerturbation}
+              disabled={loadingPosPert || !file}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              <Zap className="w-4 h-4" />
+              {loadingPosPert ? "Running..." : "Positive Perturbation"}
+            </button>
+
+            <button
+              onClick={handleNegativePerturbation}
+              disabled={loadingNegPert || !file}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {loadingNegPert ? "Running..." : "Negative Perturbation"}
+            </button>
+          </div>
+
+          {errorMsg && (
+            <div className="bg-rose-900/30 border border-rose-800 text-rose-300 px-4 py-3 rounded-lg">
+              {errorMsg}
             </div>
           )}
+        </div>
+
+        {/* Image Display */}
+        {(originalUrl || heatmapUrl) && (
+          <div className="grid md:grid-cols-2 gap-6">
+            {originalUrl && (
+              <div className="bg-slate-800 rounded-2xl shadow-xl border border-slate-700 p-6 space-y-4">
+                <div className="flex items-center gap-2 text-slate-200 font-semibold">
+                  <Activity className="w-5 h-5" />
+                  <h3 className="text-lg">Original Image</h3>
+                </div>
+                <img
+                  src={originalUrl}
+                  alt="original"
+                  className="w-full h-auto rounded-xl border border-slate-700"
+                />
+              </div>
+            )}
+
+            {heatmapUrl && (
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6 space-y-4">
+                <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                  <Activity className="w-5 h-5" />
+                  <h3 className="text-lg">LRP Heatmap</h3>
+                </div>
+                <img
+                  src={heatmapUrl}
+                  alt="heatmap"
+                  className="w-full h-auto rounded-xl border border-slate-200"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Perturbation Analysis */}
+        {(originalPrediction ||
+          positiveResults.length > 0 ||
+          negativeResults.length > 0) && (
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-700 p-6 space-y-6">
+            <h3 className="text-2xl font-bold text-slate-100">
+              LRP-based Perturbation Analysis
+            </h3>
+
+            {originalPrediction && (
+              <div className="bg-gradient-to-r from-blue-900/30 to-indigo-900/30 rounded-xl p-4 space-y-2 border border-slate-700">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-semibold text-slate-300">
+                    Top-1 (Original):
+                  </span>
+                  <span className="text-slate-100">
+                    {originalPrediction.top1.class_name}
+                  </span>
+                  <span className="text-slate-400 text-sm">
+                    (idx {originalPrediction.top1.class_idx})
+                  </span>
+                  <span className="ml-auto font-bold text-indigo-400">
+                    {(originalPrediction.top1.prob * 100).toFixed(2)}%
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-semibold text-slate-300">
+                    Target Class:
+                  </span>
+                  <span className="text-slate-100">
+                    {originalPrediction.target.class_name}
+                  </span>
+                  <span className="text-slate-400 text-sm">
+                    (idx {originalPrediction.target.class_idx})
+                  </span>
+                  <span className="ml-auto font-bold text-indigo-400">
+                    {(originalPrediction.target.prob * 100).toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {positiveResults.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-lg font-semibold text-emerald-400">
+                  Positive Perturbation (mask high-importance pixels)
+                </h4>
+                <div className="overflow-x-auto rounded-xl border border-slate-700">
+                  <table className="w-full">
+                    <thead className="bg-emerald-900/30">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">
+                          Fraction
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">
+                          Top-1 Class
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">
+                          Top-1 Prob
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">
+                          Target Prob
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700">
+                      {positiveResults.map((r) => (
+                        <tr
+                          key={`pos-${r.fraction}`}
+                          className="hover:bg-slate-700/30"
+                        >
+                          <td className="px-4 py-3 text-slate-300">
+                            {(r.fraction * 100).toFixed(0)}%
+                          </td>
+                          <td className="px-4 py-3 text-slate-300">
+                            {r.top1_class_name}{" "}
+                            <span className="text-slate-500 text-sm">
+                              (idx {r.top1_class_idx})
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-200">
+                            {(r.top1_prob * 100).toFixed(2)}%
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-200">
+                            {(r.target_prob * 100).toFixed(2)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {negativeResults.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-lg font-semibold text-rose-400">
+                  Negative Perturbation (mask low-importance pixels)
+                </h4>
+                <div className="overflow-x-auto rounded-xl border border-slate-700">
+                  <table className="w-full">
+                    <thead className="bg-rose-900/30">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">
+                          Fraction
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">
+                          Top-1 Class
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">
+                          Top-1 Prob
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">
+                          Target Prob
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700">
+                      {negativeResults.map((r) => (
+                        <tr
+                          key={`neg-${r.fraction}`}
+                          className="hover:bg-slate-700/30"
+                        >
+                          <td className="px-4 py-3 text-slate-300">
+                            {(r.fraction * 100).toFixed(0)}%
+                          </td>
+                          <td className="px-4 py-3 text-slate-300">
+                            {r.top1_class_name}{" "}
+                            <span className="text-slate-500 text-sm">
+                              (idx {r.top1_class_idx})
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-200">
+                            {(r.top1_prob * 100).toFixed(2)}%
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-200">
+                            {(r.target_prob * 100).toFixed(2)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Mask-based Perturbation */}
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Drawing Canvas */}
+          <div className="bg-slate-800 rounded-2xl shadow-xl border border-slate-700 p-6 space-y-4">
+            <h3 className="text-xl font-bold text-slate-100">
+              Mask-based Perturbation
+            </h3>
+            <p className="text-sm text-slate-400">
+              Draw over the image to create a segmentation mask. The painted
+              region will be occluded for inference.
+            </p>
+
+            <div className="rounded-xl overflow-hidden border-2 border-dashed border-slate-600 bg-slate-900">
+              {konvaImage && imgSize.width > 0 && imgSize.height > 0 ? (
+                <Stage
+                  width={imgSize.width}
+                  height={imgSize.height}
+                  onMouseDown={handleMaskMouseDown}
+                  onMouseMove={handleMaskMouseMove}
+                  onMouseUp={handleMaskMouseUp}
+                  style={{ cursor: "crosshair" }}
+                >
+                  <Layer>
+                    <KonvaImage
+                      image={konvaImage}
+                      x={0}
+                      y={0}
+                      width={imgSize.width}
+                      height={imgSize.height}
+                    />
+                  </Layer>
+                  <Layer>
+                    {maskLines.map((line, idx) => (
+                      <Line
+                        key={idx}
+                        points={line.points}
+                        stroke="#ef4444"
+                        strokeWidth={20}
+                        tension={0.5}
+                        lineCap="round"
+                        lineJoin="round"
+                        opacity={0.7}
+                      />
+                    ))}
+                  </Layer>
+                </Stage>
+              ) : (
+                <div className="p-16 text-center text-slate-500">
+                  <Upload className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>Upload an image to start drawing</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleApplyCanvasPerturbation}
+                disabled={!originalUrl || maskLines.length === 0}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              >
+                <Sparkles className="w-4 h-4" />
+                Apply Mask
+              </button>
+
+              <button
+                onClick={handleRunInferencePerturbed}
+                disabled={!perturbedUrl || loadingInfer}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              >
+                <Activity className="w-4 h-4" />
+                {loadingInfer ? "Running..." : "Run Inference"}
+              </button>
+            </div>
+          </div>
+
+          {/* Results */}
+          <div className="bg-slate-800 rounded-2xl shadow-xl border border-slate-700 p-6 space-y-4">
+            <h3 className="text-xl font-bold text-slate-100">
+              Preview & Results
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              {originalUrl && (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-slate-400">
+                    Original
+                  </p>
+                  <img
+                    src={originalUrl}
+                    alt="original-preview"
+                    className="w-full h-auto rounded-lg border border-slate-700"
+                  />
+                </div>
+              )}
+              {perturbedUrl && (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-slate-400">
+                    Perturbed
+                  </p>
+                  <img
+                    src={perturbedUrl}
+                    alt="perturbed-preview"
+                    className="w-full h-auto rounded-lg border border-slate-200"
+                  />
+                </div>
+              )}
+            </div>
+
+            {inferenceResults.length > 0 && (
+              <div className="bg-gradient-to-r from-blue-900/30 to-indigo-900/30 rounded-xl p-4 space-y-3 border border-slate-700">
+                <h4 className="font-semibold text-slate-200">
+                  Top-5 Predictions
+                </h4>
+                <div className="space-y-2">
+                  {inferenceResults.map((r, idx) => (
+                    <div
+                      key={`${r.class_idx}-${idx}`}
+                      className="flex items-center gap-3 bg-slate-800 rounded-lg p-3 border border-slate-700"
+                    >
+                      <span className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-900 text-indigo-300 font-bold text-sm">
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="font-medium text-slate-200">
+                          {r.class_name}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Index {r.class_idx}
+                        </p>
+                      </div>
+                      <span className="font-bold text-indigo-400">
+                        {(r.prob * 100).toFixed(2)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </main>
